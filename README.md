@@ -1,36 +1,54 @@
-# FinBERT: Financial Sentiment Analysis with BERT
-
-FinBERT sentiment analysis model is now available on Hugging Face model hub. You can get the model [here](https://huggingface.co/ProsusAI/finbert). 
-
-FinBERT is a pre-trained NLP model to analyze sentiment of financial text. It is built by further training
- the [BERT](https://arxiv.org/pdf/1810.04805.pdf) language model in the finance domain, using a large financial corpus and thereby fine-tuning
-  it for financial sentiment classification. For the details, please see 
-  [FinBERT: Financial Sentiment Analysis with Pre-trained Language Models](https://arxiv.org/pdf/1908.10063.pdf).
-
-**Important Note:** 
-FinBERT implementation relies on Hugging Face's `pytorch_pretrained_bert` library and their implementation of BERT for sequence classification tasks. `pytorch_pretrained_bert` is an earlier version of the [`transformers`](https://github.com/huggingface/transformers) library. It is on the top of our priority to migrate the code for FinBERT to `transformers` in the near future.
+# Taimur's README
+Follow these steps to get inference up and running.
 
 ## Installing
- Install the dependencies by creating the Conda environment `finbert` from the given `environment.yml` file and
- activating it.
+They used conda but it broke for me so I used venv
 ```bash
-conda env create -f environment.yml
-conda activate finbert
+python3 -m venv venv
+source venv/bin/activate
+pip install pytorch_pretrained_bert numpy pandas nltk Flask flask-cors transformers 
 ```
 
 ## Models
-FinBERT sentiment analysis model is now available on Hugging Face model hub. You can get the model [here](https://huggingface.co/ProsusAI/finbert). 
-
-Or, you can download the models from the links below:
-* [Language model trained on TRC2](https://prosus-public.s3-eu-west-1.amazonaws.com/finbert/language-model/pytorch_model.bin)
+Download the model from her:
 * [Sentiment analysis model trained on Financial PhraseBank](https://prosus-public.s3-eu-west-1.amazonaws.com/finbert/finbert-sentiment/pytorch_model.bin)
 
-For both of these model, the workflow should be like this:
-* Create a directory for the model. For example: `models/sentiment/<model directory name>`
+The workflow should be like this:
+* Create a directory for the model. For example: `models/sentiment/pytorch_model.bin`
 * Download the model and put it into the directory you just created.
 * Put a copy of `config.json` in this same directory. 
 * Call the model with `.from_pretrained(<model directory name>)`
 
+## Getting predictions
+We provide a script to quickly get sentiment predictions using FinBERT. Given a .txt file, `predict.py` produces a .csv file including the sentences in the text, corresponding softmax probabilities for three labels, actual prediction and sentiment score (which is calculated with: probability of positive - probability of negative).
+
+Here's an example with the provided example text: `test.txt`. From the command line, simply run:
+```bash
+python predict.py --text_path test.txt --output_dir output/ --model_path models/sentiment/pytorch_model.bin
+```
+
+## Other things you need to do
+* Install nltk
+* Download the punkt tokenizer
+```bash
+python -m nltk.downloader punkt_tab
+```
+* Add 'model_type' to the config.json file after you moved the model to the models/sentiment directory. The file should look like this:
+```json
+{
+  "model_type": "bert",
+  ...
+}
+```
+* OPTIONAL BUT GOOD PRACTICE: Add 'num_labels' to the config.json file after you moved the model to the models/sentiment directory. The file should look like this:
+```json
+{
+  "num_labels": 3,
+  ...
+}
+```
+
+# Original README content (not important for now)
 ## Datasets
 There are two datasets used for FinBERT. The language model further training is done on a subset of Reuters TRC2 
 dataset. This dataset is not public, but researchers can apply for access 
