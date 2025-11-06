@@ -140,9 +140,14 @@ class FinBert(object):
         }
 
         if self.config.local_rank == -1 or self.config.no_cuda:
-            self.device = torch.device("cuda" if torch.cuda.is_available() and not self.config.no_cuda else "cpu")
-            self.n_gpu = torch.cuda.device_count()
+            self.device = get_device(self.config.no_cuda)
+            # Only count GPUs for CUDA (MPS doesn't support multi-GPU in the same way)
+            if self.device.type == "cuda":
+                self.n_gpu = torch.cuda.device_count()
+            else:
+                self.n_gpu = 1 if self.device.type == "mps" else 0
         else:
+            # Distributed training only supported with CUDA
             torch.cuda.set_device(self.config.local_rank)
             self.device = torch.device("cuda", self.config.local_rank)
             self.n_gpu = 1
@@ -161,7 +166,8 @@ class FinBert(object):
         np.random.seed(self.config.seed)
         torch.manual_seed(self.config.seed)
 
-        if self.n_gpu > 0:
+        # Set seed for CUDA devices (MPS doesn't have manual_seed_all)
+        if self.device.type == "cuda" and self.n_gpu > 0:
             torch.cuda.manual_seed_all(self.config.seed)
 
         if os.path.exists(self.config.model_dir) and os.listdir(self.config.model_dir):
@@ -603,7 +609,14 @@ def predict(text, model, write_to_csv=False, path=None, use_gpu=False, gpu_name=
 
     sentences = sent_tokenize(text)
 
-    device = gpu_name if use_gpu and torch.cuda.is_available() else "cpu"
+    # Use the device helper function for better device selection
+    if use_gpu:
+        device = get_device(no_cuda=False)
+        # If user specified a specific CUDA device, use it
+        if device.type == "cuda" and gpu_name.startswith("cuda:"):
+            device = torch.device(gpu_name)
+    else:
+        device = torch.device("cpu")
     logging.info("Using device: %s " % device)
     label_list = ['positive', 'negative', 'neutral']
     label_dict = {0: 'positive', 1: 'negative', 2: 'neutral'}

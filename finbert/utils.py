@@ -298,3 +298,31 @@ def chunks(l, n):
     for i in range(0, len(l), n):
         # Create an index range for l of n items:
         yield l[i:i + n]
+
+
+def get_device(no_cuda=False):
+    """
+    Get the best available device for PyTorch operations.
+    Priority: CUDA > MPS (Apple Silicon) > CPU
+    
+    Parameters
+    ----------
+    no_cuda: bool, optional
+        If True, forces CPU usage even if CUDA is available. Default is False.
+    
+    Returns
+    -------
+    device: torch.device
+        The selected device
+    """
+    if not no_cuda:
+        # Check for CUDA first (preferred for performance)
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+        
+        # Check for MPS (Apple Silicon GPU)
+        if hasattr(torch.backends, 'mps') and torch.backends.mps.is_available():
+            return torch.device("mps")
+    
+    # Fall back to CPU
+    return torch.device("cpu")

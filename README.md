@@ -47,6 +47,10 @@ python -m nltk.downloader punkt_tab
   ...
 }
 ```
+* GPU support: I added support for Mac integrated GPU so if you run predict.py with --use_gpu flag, it will use the integrated GPU.
+```bash
+python predict.py --text_path test.txt --output_dir output/ --model_path models/sentiment/pytorch_model.bin --use_gpu
+```
 
 # Original README content (not important for now)
 ## Datasets

@@ -1,4 +1,5 @@
 from finbert.finbert import predict
+from finbert.utils import get_device
 from transformers import AutoModelForSequenceClassification
 import argparse
 import os
@@ -11,6 +12,10 @@ parser.add_argument("-a", action="store_true", default=False)
 parser.add_argument("--text_path", type=str, help="Path to the text file.")
 parser.add_argument("--output_dir", type=str, help="Where to write the results")
 parser.add_argument("--model_path", type=str, help="Path to classifier model")
+parser.add_argument("--use_gpu", action="store_true", default=False,
+                    help="Use GPU/MPS for inference (auto-detected if not specified)")
+parser.add_argument("--no_gpu", action="store_true", default=False,
+                    help="Force CPU usage even if GPU/MPS is available")
 
 args = parser.parse_args()
 
@@ -25,9 +30,21 @@ model = AutoModelForSequenceClassification.from_pretrained(
     args.model_path, num_labels=3, cache_dir=None
 )
 
+# Automatically detect and use GPU/MPS if available (unless explicitly disabled)
+if args.no_gpu:
+    use_gpu = False
+elif args.use_gpu:
+    use_gpu = True
+else:
+    # Auto-detect: use GPU/MPS if available
+    device = get_device(no_cuda=False)
+    use_gpu = device.type != "cpu"
+    if use_gpu:
+        print(f"Auto-detected device: {device.type}, using GPU/MPS for inference")
+
 output = "predictions.csv"
 results = predict(
-    text, model, write_to_csv=True, path=os.path.join(args.output_dir, output)
+    text, model, write_to_csv=True, path=os.path.join(args.output_dir, output), use_gpu=use_gpu
 )
 
 # Print results in a human-readable format
