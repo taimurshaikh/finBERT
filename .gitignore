@@ -1,37 +1,34 @@
 
-data/
-
 # Distribution / packaging
-~*.*
-screenlog*.*
-workspace.xml
-__pycache__/
-*.egg-info/
-*.py[cod]
+# Environments
+# Jupyter Notebook
+# PyBuilder
+# mypy
+# pyenv
+#pycharm
 *$py.class
 *.DS_Store
-.idea/
+*.egg-info/
+*.py[cod]
 *.pyc
-
-# PyBuilder
-target/
-
-# Jupyter Notebook
-.ipynb_checkpoints
-
-# pyenv
-.python-version
-
-# Environments
 .env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-# mypy
+.idea/
+.ipynb_checkpoints
+.ipynb_checkpoints/
 .mypy_cache/
-#pycharm
-workspace.xml
+.python-version
+.venv
+ENV/
+__pycache__/
+build/
+data/
+env.bak/
+env/
 models/
+screenlog*.*
+target/
+tb_profiler/
+venv.bak/
+venv/
+workspace.xml
+~*.*
