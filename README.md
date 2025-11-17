@@ -6,7 +6,7 @@ They used conda but it broke for me so I used venv
 ```bash
 python3 -m venv venv
 source venv/bin/activate
-pip install pytorch_pretrained_bert numpy pandas nltk Flask flask-cors transformers 
+pip install -r requirements.txt
 ```
 
 ## Models
