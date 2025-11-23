@@ -1,4 +1,4 @@
-# Taimur's README
+# Setup
 Follow these steps to get inference up and running.
 
 ## Installing
@@ -52,12 +52,7 @@ python -m nltk.downloader punkt_tab
 python predict.py --text_path test.txt --output_dir output/ --model_path models/sentiment --use_gpu
 ```
 
-# Original README content (not important for now)
 ## Datasets
-There are two datasets used for FinBERT. The language model further training is done on a subset of Reuters TRC2 
-dataset. This dataset is not public, but researchers can apply for access 
-[here](https://trec.nist.gov/data/reuters/reuters.html).
-
 For the sentiment analysis, we used Financial PhraseBank from [Malo et al. (2014)](https://www.researchgate.net/publication/251231107_Good_Debt_or_Bad_Debt_Detecting_Semantic_Orientations_in_Economic_Texts).
  The dataset can be downloaded from this [link](https://www.researchgate.net/profile/Pekka_Malo/publication/251231364_FinancialPhraseBank-v10/data/0c96051eee4fb1d56e000000/FinancialPhraseBank-v10.zip?origin=publication_list).
  If you want to train the model on the same dataset, after downloading it, you should create three files under the 
@@ -95,13 +90,13 @@ Here's an example with the provided example text: `test.txt`. From the command l
 ```bash
 python predict.py --text_path test.txt --output_dir output/ --model_path models/classifier_model/finbert-sentiment
 ```
-## Disclaimer
-This is not an official Prosus product. It is the outcome of an intern research project in Prosus AI team.
-### About Prosus 
-Prosus is a global consumer internet group and one of the largest technology investors in the world. Operating and
- investing globally in markets with long-term growth potential, Prosus builds leading consumer internet companies that empower people and enrich communities.
-For more information, please visit [www.prosus.com](www.prosus.com).
 
-## Contact information
-Please contact Dogu Araci `dogu.araci[at]prosus[dot]com` and Zulkuf Genc `zulkuf.genc[at]prosus[dot]com` about
- any FinBERT related issues and questions.
+# Profiling
+To profile the model, run the `finbert_profiling.ipynb` notebook. This is a modified version of the original notebook that adds profiling to the model.
+
+## Model Variants
+I've set it up so that we can load different model variants (i.e. with different optimizations) and profile them. The current variants are:
+* Baseline
+* Quantized Int8
+
+Instructions on how to select between variants to train/run and how to add a new variant are in the notebook.
