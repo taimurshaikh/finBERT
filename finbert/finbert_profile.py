@@ -410,13 +410,35 @@ def profile_inference(text, model, write_to_csv=False, path=None, variant_name="
     if write_to_csv:
         result.to_csv(path, sep=',', index=False)
     
+    # Extract profiler timings (prefer CUDA times when available on CUDA devices)
+    ka = prof.key_averages()
+
+    def _event_time_ms(events, key, prefer_cuda):
+        for e in events:
+            if e.key == key:
+                # Some profiler builds may not have cuda_time_total attribute; guard access
+                cuda_ms = getattr(e, "cuda_time_total", 0) / 1000.0 if getattr(e, "cuda_time_total", 0) else 0.0
+                cpu_ms = getattr(e, "cpu_time_total", 0) / 1000.0 if getattr(e, "cpu_time_total", 0) else 0.0
+                if prefer_cuda and cuda_ms:
+                    return cuda_ms
+                return cpu_ms
+        return 0.0
+
+    prefer_cuda = (device.type == "cuda")
+    tokenization_time_ms = _event_time_ms(ka, "sentence_tokenization", prefer_cuda)
+    inference_forward_time_ms = _event_time_ms(ka, "inference_forward", prefer_cuda)
+    model_to_device_time_ms = _event_time_ms(ka, "model_to_device", prefer_cuda)
+
     metrics = {
         'variant': variant_name,
         'total_sentences': len(sentences),
         'inference_time_ms': total_inference_time * 1000,
-        'time_per_sentence_ms': (total_inference_time * 1000) / len(sentences),
+        'time_per_sentence_ms': (total_inference_time * 1000) / len(sentences) if len(sentences) else 0.0,
         'device': str(device),
-        'is_quantized': is_quantized
+        'is_quantized': is_quantized,
+        'tokenization_time_ms': tokenization_time_ms,
+        'inference_forward_time_ms': inference_forward_time_ms,
+        'model_to_device_time_ms': model_to_device_time_ms,
     }
     
     print(f"\nInference Summary:")
