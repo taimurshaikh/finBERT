@@ -5,6 +5,7 @@ from transformers import AutoModelForSequenceClassification
 import argparse
 import os
 import numpy as np
+import wandb
 
 parser = argparse.ArgumentParser(description="Sentiment analyzer")
 
@@ -42,10 +43,23 @@ else:
     if use_gpu:
         print(f"Auto-detected device: {device.type}, using GPU/MPS for inference")
 
+
+wandb.init(
+    entity="shriya-mahakala",   # your personal workspace (username)
+    project="HPML_Project",
+    name="prediction", 
+    group="baseline"
+    )
+wandb.config.update({
+    "model_name": "distilbert-base-uncased",
+    "gpu_used": use_gpu
+})
 output = "predictions.csv"
 results, metrics = profile_inference(
     text, model, write_to_csv=True, path=os.path.join(args.output_dir, output), use_gpu=use_gpu
 )
+
+wandb.log(metrics)
 
 # Print results in a human-readable format
 print("\n" + "=" * 80)
@@ -101,3 +115,4 @@ print(f"Overall sentiment: {overall}")
 
 print(f"\nResults saved to: {os.path.join(args.output_dir, output)}")
 print("=" * 80 + "\n")
+wandb.finish()
