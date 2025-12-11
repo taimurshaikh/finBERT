@@ -69,6 +69,8 @@ class ProfiledFinBert(FinBert):
         print("="*80 + "\\n")
         
         i = 0
+
+        scaler = torch.cuda.amp.GradScaler(enabled=self.config.use_amp)
         
         with profile(
             activities=activities,
@@ -111,24 +113,29 @@ class ProfiledFinBert(FinBert):
                     
                     # Forward pass profiling
                     with record_function("forward_pass"):
-                        logits = model(input_ids, attention_mask, token_type_ids)[0]
+                        with torch.cuda.amp.autocast(enabled=self.config.use_amp):
+                            logits = model(input_ids, attention_mask, token_type_ids)[0]
                     
                     # Loss calculation profiling
                     with record_function("loss_calculation"):
-                        weights = self.class_weights.to(self.device)
-                        if self.config.output_mode == "classification":
-                            loss_fct = CrossEntropyLoss(weight=weights)
-                            loss = loss_fct(logits.view(-1, self.num_labels), label_ids.view(-1))
-                        elif self.config.output_mode == "regression":
-                            loss_fct = MSELoss()
-                            loss = loss_fct(logits.view(-1), label_ids.view(-1))
-                        
-                        if self.config.gradient_accumulation_steps > 1:
-                            loss = loss / self.config.gradient_accumulation_steps
+                        with torch.cuda.amp.autocast(enabled=self.config.use_amp):
+                            weights = self.class_weights.to(self.device)
+                            if self.config.output_mode == "classification":
+                                loss_fct = CrossEntropyLoss(weight=weights)
+                                loss = loss_fct(logits.view(-1, self.num_labels), label_ids.view(-1))
+                            elif self.config.output_mode == "regression":
+                                loss_fct = MSELoss()
+                                loss = loss_fct(logits.view(-1), label_ids.view(-1))
+                            
+                            if self.config.gradient_accumulation_steps > 1:
+                                loss = loss / self.config.gradient_accumulation_steps
                     
                     # Backward pass profiling
                     with record_function("backward_pass"):
-                        loss.backward()
+                        if self.config.use_amp:
+                            scaler.scale(loss).backward()
+                        else:
+                            loss.backward()
                     
                     tr_loss += loss.item()
                     nb_tr_examples += input_ids.size(0)
@@ -142,8 +149,16 @@ class ProfiledFinBert(FinBert):
                                     global_step / self.num_train_optimization_steps, self.config.warm_up_proportion)
                                 for param_group in self.optimizer.param_groups:
                                     param_group['lr'] = lr_this_step
-                            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-                            self.optimizer.step()
+                            
+                            if self.config.use_amp:
+                                scaler.unscale_(self.optimizer)
+                                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                                scaler.step(self.optimizer)
+                                scaler.update()
+                            else:
+                                torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                                self.optimizer.step()
+                                
                             self.scheduler.step()
                             self.optimizer.zero_grad()
                             global_step += 1
@@ -207,18 +222,22 @@ class ProfiledFinBert(FinBert):
                 batch = tuple(t.to(self.device) for t in batch)
                 input_ids, attention_mask, token_type_ids, label_ids, agree_ids = batch
                 
-                logits = model(input_ids, attention_mask, token_type_ids)[0]
-                weights = self.class_weights.to(self.device)
+                with torch.cuda.amp.autocast(enabled=self.config.use_amp):
+                    logits = model(input_ids, attention_mask, token_type_ids)[0]
+                    weights = self.class_weights.to(self.device)
+                    
+                    if self.config.output_mode == "classification":
+                        loss_fct = CrossEntropyLoss(weight=weights)
+                        loss = loss_fct(logits.view(-1, self.num_labels), label_ids.view(-1))
+                    elif self.config.output_mode == "regression":
+                        loss_fct = MSELoss()
+                        loss = loss_fct(logits.view(-1), label_ids.view(-1))
+                    
+                    if self.config.gradient_accumulation_steps > 1:
+                        loss = loss / self.config.gradient_accumulation_steps
                 
-                if self.config.output_mode == "classification":
-                    loss_fct = CrossEntropyLoss(weight=weights)
-                    loss = loss_fct(logits.view(-1, self.num_labels), label_ids.view(-1))
-                elif self.config.output_mode == "regression":
-                    loss_fct = MSELoss()
-                    loss = loss_fct(logits.view(-1), label_ids.view(-1))
-                
-                if self.config.gradient_accumulation_steps > 1:
-                    loss = loss / self.config.gradient_accumulation_steps
+                if self.config.use_amp:
+                    scaler.scale(loss).backward()
                 else:
                     loss.backward()
                 
@@ -232,8 +251,16 @@ class ProfiledFinBert(FinBert):
                             global_step / self.num_train_optimization_steps, self.config.warm_up_proportion)
                         for param_group in self.optimizer.param_groups:
                             param_group['lr'] = lr_this_step
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-                    self.optimizer.step()
+                    
+                    if self.config.use_amp:
+                        scaler.unscale_(self.optimizer)
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                        scaler.step(self.optimizer)
+                        scaler.update()
+                    else:
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                        self.optimizer.step()
+
                     self.scheduler.step()
                     self.optimizer.zero_grad()
                     global_step += 1
@@ -294,7 +321,7 @@ class ProfiledFinBert(FinBert):
 
 
 
-def profile_inference(text, model, write_to_csv=False, path=None, variant_name="unknown", use_gpu=False, gpu_name='cuda:0', batch_size=5):
+def profile_inference(text, model, write_to_csv=False, path=None, variant_name="unknown", use_gpu=False, gpu_name='cuda:0', batch_size=5, use_amp=False):
     """
     Profile model inference performance.
     
@@ -385,7 +412,8 @@ def profile_inference(text, model, write_to_csv=False, path=None, variant_name="
                 
                 with record_function("inference_forward"):
                     start_time = time.time()
-                    logits = model(input_ids=all_input_ids, attention_mask=all_attention_mask, token_type_ids=all_token_type_ids)[0]
+                    with torch.cuda.amp.autocast(enabled=use_amp):
+                        logits = model(input_ids=all_input_ids, attention_mask=all_attention_mask, token_type_ids=all_token_type_ids)[0]
                     total_inference_time += time.time() - start_time
                 
                 with record_function("postprocess_results"):

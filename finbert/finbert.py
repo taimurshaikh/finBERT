@@ -40,6 +40,7 @@ class Config(object):
                  local_rank=-1,
                  gradient_accumulation_steps=1,
                  fp16=False,
+                 use_amp=False,
                  output_mode='classification',
                  discriminate=True,
                  gradual_unfreeze=True,
@@ -106,6 +107,7 @@ class Config(object):
         self.gradient_accumulation_steps = gradient_accumulation_steps
         self.output_mode = output_mode
         self.fp16 = fp16
+        self.use_amp = use_amp
         self.discriminate = discriminate
         self.gradual_unfreeze = gradual_unfreeze
         self.encoder_no = encoder_no
@@ -380,6 +382,8 @@ class FinBert(object):
 
         step_number = len(train_dataloader)
 
+        scaler = torch.cuda.amp.GradScaler(enabled=self.config.use_amp)
+
         i = 0
         for _ in trange(int(self.config.num_train_epochs), desc="Epoch"):
 
@@ -415,18 +419,22 @@ class FinBert(object):
 
                 input_ids, attention_mask, token_type_ids, label_ids, agree_ids = batch
 
-                logits = model(input_ids, attention_mask, token_type_ids)[0]
-                weights = self.class_weights.to(self.device)
+                with torch.cuda.amp.autocast(enabled=self.config.use_amp):
+                    logits = model(input_ids, attention_mask, token_type_ids)[0]
+                    weights = self.class_weights.to(self.device)
 
-                if self.config.output_mode == "classification":
-                    loss_fct = CrossEntropyLoss(weight=weights)
-                    loss = loss_fct(logits.view(-1, self.num_labels), label_ids.view(-1))
-                elif self.config.output_mode == "regression":
-                    loss_fct = MSELoss()
-                    loss = loss_fct(logits.view(-1), label_ids.view(-1))
+                    if self.config.output_mode == "classification":
+                        loss_fct = CrossEntropyLoss(weight=weights)
+                        loss = loss_fct(logits.view(-1, self.num_labels), label_ids.view(-1))
+                    elif self.config.output_mode == "regression":
+                        loss_fct = MSELoss()
+                        loss = loss_fct(logits.view(-1), label_ids.view(-1))
 
-                if self.config.gradient_accumulation_steps > 1:
-                    loss = loss / self.config.gradient_accumulation_steps
+                    if self.config.gradient_accumulation_steps > 1:
+                        loss = loss / self.config.gradient_accumulation_steps
+
+                if self.config.use_amp:
+                    scaler.scale(loss).backward()
                 else:
                     loss.backward()
 
@@ -439,8 +447,16 @@ class FinBert(object):
                             global_step / self.num_train_optimization_steps, self.config.warm_up_proportion)
                         for param_group in self.optimizer.param_groups:
                             param_group['lr'] = lr_this_step
-                    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-                    self.optimizer.step()
+                    
+                    if self.config.use_amp:
+                        scaler.unscale_(self.optimizer)
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                        scaler.step(self.optimizer)
+                        scaler.update()
+                    else:
+                        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+                        self.optimizer.step()
+
                     self.scheduler.step()
                     self.optimizer.zero_grad()
                     global_step += 1
